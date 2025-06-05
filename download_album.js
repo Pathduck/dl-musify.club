@@ -98,7 +98,11 @@ function getLinksAndTags(html, domain) {
 
 function executeInChunks(callbackArgs, callback, queueSize = 5) {
   const execWith = async (element, index) => {
-    await callback(element);
+    try {
+      await callback(element);
+    } catch (error) {
+        console.warn('Download of: ', element, " FAILED with error: ", error);
+    }
     return index;
   };
 
@@ -115,7 +119,7 @@ function executeInChunks(callbackArgs, callback, queueSize = 5) {
         queueArray.splice(index, 1, execWith(callbackArgs.shift(), index));
         keepQueueSize();
       } catch (error) {
-        console.log('Cannot assemble another chunk');
+        console.error('Cannot assemble another chunk, error: ', error);
         throw error;
       }
     }
