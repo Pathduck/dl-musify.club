@@ -62,7 +62,7 @@ function processArgs(argv) {
 function getLinksAndTags(html, domain) {
   const $ = cheerio.load(html);
 
-  const [album, artist = 'VA'] = $('h1')
+  const [albumTitle, albumArtist = 'VA'] = $('h1')
     .text()
     .trim()
     .split(' - ', 2)
@@ -83,13 +83,17 @@ function getLinksAndTags(html, domain) {
       url: `https://${domain}${$(element)
         .find('.playlist__control.play')
         .attr('data-play-url')}`,
+	  albumArtist,
+      albumTitle,
       trackNo,
-      title: $(element)
-        .find('.playlist__details a.strong')
+      trackArtist: $(element)
+        .find('.playlist__details a:first-of-type')
         .text()
         .trim(),
-      artist,
-      album
+      trackTitle: $(element)
+        .find('.playlist__details a:last-of-type')
+        .text()
+        .trim()
     });
   });
 
@@ -155,31 +159,31 @@ async function downloadTrack({ url, ...trackInfo }) {
     prop => (trackInfo[prop] = cleanUpSymbols(trackInfo[prop]))
   );
 
-  const { artist, album, trackNo, title } = trackInfo;
-  const filename = `${artist}/${album}/${trackNo} - ${title}.mp3`;
+  const { albumArtist, albumTitle, trackNo, trackArtist, trackTitle } = trackInfo;
+  const filename = `${albumArtist}/${albumTitle}/${trackNo}. ${trackArtist} - ${trackTitle}.mp3`;
 
-  console.log(`Starting download: ${trackNo} - ${title}`);
+  console.log(`Starting download: ${trackNo} - ${trackTitle}`);
 
   try {
     const file = await downloadFile(url, filename);
-    console.log(`Download is finished: ${trackNo} - ${title}`);
+    console.log(`Download is finished: ${trackNo} - ${trackTitle}`);
     return file;
   } catch (error) {
-    console.log(`Download is failed: ${trackNo} - ${title}`);
+    console.log(`Download is failed: ${trackNo} - ${trackTitle}`);
     throw error;
   }
 }
 
 function prepareAlbumDir(tracksData) {
   return new Promise(resolve => {
-    const artist = cleanUpSymbols(tracksData[0].artist);
-    const album = cleanUpSymbols(tracksData[0].album);
-    const albumDir = `${artist}/${album}`;
+    const albumArtist = cleanUpSymbols(tracksData[0].albumArtist);
+    const albumTitle = cleanUpSymbols(tracksData[0].albumTitle);
+    const albumDir = `${albumArtist}/${albumTitle}`;
 
     // Check the existence of the target directory
     fs.access(albumDir, fs.constants.F_OK, error => {
       if (error) {
-        fs.mkdir(`${artist}`, () => {
+        fs.mkdir(`${albumArtist}`, () => {
           fs.mkdir(albumDir, () => {
             resolve(albumDir);
           });
