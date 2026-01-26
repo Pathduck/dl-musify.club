@@ -6,6 +6,7 @@ const url = require('url');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const parseArgs = require('minimist');
+const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
 
 function usage(exitCode) {
   console.log(
@@ -141,7 +142,7 @@ function downloadFile(url, filename) {
     unpromisifiedRequest({
       url,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+        'User-Agent': userAgent
       }
     })
       .on('error', reject)
@@ -218,7 +219,7 @@ async function downloadCover(coverURL, albumDir) {
     const body = await request({
       url: albumURL,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+        'User-Agent': userAgent
       }
     });
     const { tracksData, coverURL } = getLinksAndTags(body, domain);
