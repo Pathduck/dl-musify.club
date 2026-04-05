@@ -6,7 +6,7 @@ const url = require('url');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const parseArgs = require('minimist');
-const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36'
 
 function usage(exitCode) {
   console.log(
@@ -71,7 +71,7 @@ function getLinksAndTags(html, domain) {
   const tracksData = [];
   const $tracks = $('.playlist__item');
   const len = $tracks.length;
-  const coverURL = $('.album-img').attr('data-src');
+  const coverURL = $('.album-img').attr('src');
 
   $tracks.each((index, element) => {
     let trackNo = $(element)
