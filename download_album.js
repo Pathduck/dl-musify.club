@@ -75,24 +75,27 @@ function getLinksAndTags(html, domain) {
 
   $tracks.each((index, element) => {
     let trackNo = $(element)
-      .find('.playlist__position')
+      //.find('.playlist__position')
+      .find('.tracklist__position-number')
       .text()
       .trim();
     if (trackNo.length < 2) trackNo = '0' + trackNo;
 
     tracksData.push({
       url: `https://${domain}${$(element)
-        .find('.playlist__control.play')
-        .attr('data-play-url')}`,
+        //.find('.playlist__control.play')
+        .find('.dl-btn')
+        //.attr('data-play-url')}`,
+        .attr('href')}`,
 	  albumArtist,
       albumTitle,
       trackNo,
       trackArtist: $(element)
-        .find('.playlist__details a:first-of-type')
+        .find('.tracklist__artist a')
         .text()
         .trim(),
       trackTitle: $(element)
-        .find('.playlist__details a:last-of-type')
+        .find('.tracklist__title a')
         .text()
         .trim()
     });
@@ -163,6 +166,7 @@ async function downloadTrack({ url, ...trackInfo }) {
   const { albumArtist, albumTitle, trackNo, trackArtist, trackTitle } = trackInfo;
   const filename = `${albumArtist}/${albumTitle}/${trackNo}. ${trackArtist} - ${trackTitle}.mp3`;
 
+  console.log(`url: ${url}`);
   console.log(`Starting download: ${trackNo} - ${trackTitle}`);
 
   try {
