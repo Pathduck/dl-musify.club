@@ -2,11 +2,11 @@
 
 const request = require('request-promise-native');
 const unpromisifiedRequest = require('request');
-const url = require('url');
 const cheerio = require('cheerio');
 const fs = require('fs');
+const jar = request.jar();
 const parseArgs = require('minimist');
-const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36'
+const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
 
 function usage(exitCode) {
   console.log(
@@ -52,7 +52,7 @@ function processArgs(argv) {
   if (typeof argv.sim !== 'number') usage(1);
 
   const albumURL = argv._[0];
-  const domain = url.parse(albumURL).hostname;
+  const domain = new URL(albumURL).hostname;
   const parallelDownloads = argv.sim;
   const isDebugMode = argv.debug;
   const trackID = argv.trackID;
@@ -60,9 +60,8 @@ function processArgs(argv) {
   return { albumURL, domain, parallelDownloads, isDebugMode, trackID };
 }
 
-function getLinksAndTags(html, domain) {
+async function getLinksAndTags(html, domain) {
   const $ = cheerio.load(html);
-
   const [albumTitle, albumArtist = 'VA'] = $('h1')
     .text()
     .trim()
@@ -70,24 +69,53 @@ function getLinksAndTags(html, domain) {
     .reverse();
   const tracksData = [];
   const $tracks = $('.playlist__item');
-  const len = $tracks.length;
   const coverURL = $('.album-img').attr('src');
 
-  $tracks.each((index, element) => {
+  for (const element of $tracks.toArray()) {
     let trackNo = $(element)
-      //.find('.playlist__position')
       .find('.tracklist__position-number')
       .text()
       .trim();
+
     if (trackNo.length < 2) trackNo = '0' + trackNo;
 
+    // NEW: get track id
+    const trackID = $(element).attr('data-track-id');
+
+    if (!trackID) {
+      console.log('Could not find track ID');
+      continue;
+    }
+
+    // NEW: query API
+    let streamURL = '';
+
+    try {
+      const apiResponse = await request({
+        url: `https://${domain}/api/track/${trackID}/stream-url`,
+        jar,
+        json: true,
+        headers: {
+          'User-Agent': userAgent,
+          'X-Requested-With': 'XMLHttpRequest',
+          Referer: `https://${domain}/`
+        }
+      });
+
+      streamURL = apiResponse.url;
+
+      if (!streamURL) {
+        console.log(`No stream URL for track ${trackID}`);
+        continue;
+      }
+    } catch (err) {
+      console.log(`Failed API request for track ${trackID}`);
+      continue;
+    }
+
     tracksData.push({
-      url: `https://${domain}${$(element)
-        //.find('.playlist__control.play')
-        .find('.dl-btn')
-        //.attr('data-play-url')}`,
-        .attr('href')}`,
-	  albumArtist,
+      url: streamURL,
+      albumArtist,
       albumTitle,
       trackNo,
       trackArtist: $(element)
@@ -99,7 +127,7 @@ function getLinksAndTags(html, domain) {
         .text()
         .trim()
     });
-  });
+  }
 
   return { tracksData, coverURL };
 }
@@ -144,6 +172,7 @@ function downloadFile(url, filename) {
   return new Promise((resolve, reject) => {
     unpromisifiedRequest({
       url,
+      jar,
       headers: {
         'User-Agent': userAgent
       }
@@ -166,7 +195,6 @@ async function downloadTrack({ url, ...trackInfo }) {
   const { albumArtist, albumTitle, trackNo, trackArtist, trackTitle } = trackInfo;
   const filename = `${albumArtist}/${albumTitle}/${trackNo}. ${trackArtist} - ${trackTitle}.mp3`;
 
-  console.log(`url: ${url}`);
   console.log(`Starting download: ${trackNo} - ${trackTitle}`);
 
   try {
@@ -222,11 +250,13 @@ async function downloadCover(coverURL, albumDir) {
   try {
     const body = await request({
       url: albumURL,
+      jar,
       headers: {
         'User-Agent': userAgent
       }
     });
-    const { tracksData, coverURL } = getLinksAndTags(body, domain);
+
+    const { tracksData, coverURL } = await getLinksAndTags(body, domain);
     const albumDir = await prepareAlbumDir(tracksData);
 
     if (trackID) {
@@ -236,9 +266,9 @@ async function downloadCover(coverURL, albumDir) {
 
     await downloadCover(coverURL, albumDir);
     await executeInChunks(tracksData, downloadTrack, parallelDownloads);
+
   } catch (error) {
     console.log(`Failed to download the album: ${error}`);
-
     if (isDebugMode) {
       console.log(error.stack);
     }
