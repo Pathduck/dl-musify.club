@@ -1,25 +1,31 @@
 #!/usr/bin/env node
 
-const request = require('request-promise-native');
-const unpromisifiedRequest = require('request');
 const cheerio = require('cheerio');
 const fs = require('fs');
-const jar = request.jar();
 const parseArgs = require('minimist');
-const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+const { pipeline } = require('stream/promises');
+const { CookieJar } = require('tough-cookie');
+const fetchCookie = require('fetch-cookie').default;
 
+const jar = new CookieJar();
+const fetchWithCookies = fetchCookie(fetch, jar);
+const userAgent =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36';
+
+// Print help/usage information
 function usage(exitCode) {
   console.log(
-    'Usage:\n\tnode download_album.js [OPTIONS] ALBUM_URL\n\n' +
+    'Usage:\nnode download_album.js [OPTIONS] ALBUM_URL\n\n' +
       'Valid options are:\n' +
-      '\t-h|--help\t\tGet this message\n' +
-      '\t-d|--debug\t\tPrint stack trace on error\n' +
-      '\t-s NUMBER\t\tNumber of tracks to be downloaded simultaneously (default: 5)\n' +
-      '\t-t NUMBER\t\tDownload specific track number (useful if some track failed to download)'
+      '-h|--help\tGet this message\n' +
+      '-d|--debug\tPrint stack trace on error\n' +
+      '-s NUMBER\tNumber of tracks to be downloaded simultaneously (default: 5)\n' +
+      '-t NUMBER\tDownload specific track number (useful if some track failed to download)'
   );
   process.exit(exitCode);
 }
 
+// Parse command-line arguments
 const argv = parseArgs(process.argv.slice(2), {
   alias: {
     help: 'h',
@@ -39,14 +45,16 @@ const argv = parseArgs(process.argv.slice(2), {
 
   stopEarly: true,
 
+  // Reject unknown command-line options
   unknown: key => {
     if (!key.startsWith('-')) return;
-
-    console.log(`Unknown key: ${key}\n`);
+    console.log(`Unknown key: ${key}
+`);
     usage(1);
   }
 });
 
+// Validate/process command-line arguments
 function processArgs(argv) {
   if (argv.help) usage(0);
   if (typeof argv.sim !== 'number') usage(1);
@@ -57,29 +65,79 @@ function processArgs(argv) {
   const isDebugMode = argv.debug;
   const trackID = argv.trackID;
 
-  return { albumURL, domain, parallelDownloads, isDebugMode, trackID };
+  return {
+    albumURL,
+    domain,
+    parallelDownloads,
+    isDebugMode,
+    trackID
+  };
 }
 
+// Fetch text/HTML from a URL
+async function fetchText(url, headers = {}) {
+  const response = await fetchWithCookies(url, {
+    headers: {
+      'User-Agent': userAgent,
+      ...headers
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${url}`);
+  }
+
+  return response.text();
+}
+
+// Fetch JSON from a URL
+async function fetchJSON(url, headers = {}) {
+  const response = await fetchWithCookies(url, {
+    headers: {
+      'User-Agent': userAgent,
+      ...headers
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${url}`);
+  }
+
+  return response.json();
+}
+
+// Parse the album page and extract:
+// - album metadata
+// - cover image URL
+// - track names
+// - stream URLs from the API
 async function getLinksAndTags(html, domain) {
   const $ = cheerio.load(html);
+  const tracksData = [];
+  // Extract album artist/title from the page heading
   const [albumTitle, albumArtist = 'VA'] = $('h1')
     .text()
     .trim()
     .split(' - ', 2)
     .reverse();
-  const tracksData = [];
+  // All track elements in the playlist
   const $tracks = $('.playlist__item');
+  // Album cover image URL
   const coverURL = $('.album-img').attr('src');
 
+  // Iterate through all tracks
   for (const element of $tracks.toArray()) {
     let trackNo = $(element)
       .find('.tracklist__position-number')
       .text()
       .trim();
 
-    if (trackNo.length < 2) trackNo = '0' + trackNo;
+    // Pad track numbers to two digits
+    if (trackNo.length < 2) {
+      trackNo = '0' + trackNo;
+    }
 
-    // NEW: get track id
+    // Musify pages store a track ID in HTML
     const trackID = $(element).attr('data-track-id');
 
     if (!trackID) {
@@ -87,58 +145,56 @@ async function getLinksAndTags(html, domain) {
       continue;
     }
 
-    // NEW: query API
-    let streamURL = '';
-
     try {
-      const apiResponse = await request({
-        url: `https://${domain}/api/track/${trackID}/stream-url`,
-        jar,
-        json: true,
-        headers: {
-          'User-Agent': userAgent,
+      // Query Musify API to get the real MP3 stream URL
+      const apiResponse = await fetchJSON(
+        `https://${domain}/api/track/${trackID}/stream-url`,
+        {
           'X-Requested-With': 'XMLHttpRequest',
           Referer: `https://${domain}/`
         }
-      });
+      );
 
-      streamURL = apiResponse.url;
+      const streamURL = apiResponse.url;
 
       if (!streamURL) {
         console.log(`No stream URL for track ${trackID}`);
         continue;
       }
+
+      // Store metadata for later downloading
+      tracksData.push({
+        url: streamURL,
+        albumArtist,
+        albumTitle,
+        trackNo,
+        trackArtist: $(element)
+          .find('.tracklist__artist a')
+          .text()
+          .trim(),
+        trackTitle: $(element)
+          .find('.tracklist__title a')
+          .text()
+          .trim()
+      });
     } catch (err) {
       console.log(`Failed API request for track ${trackID}`);
-      continue;
     }
-
-    tracksData.push({
-      url: streamURL,
-      albumArtist,
-      albumTitle,
-      trackNo,
-      trackArtist: $(element)
-        .find('.tracklist__artist a')
-        .text()
-        .trim(),
-      trackTitle: $(element)
-        .find('.tracklist__title a')
-        .text()
-        .trim()
-    });
   }
 
   return { tracksData, coverURL };
 }
 
+// Run async operations in parallel with a fixed queue size
+// Prevents downloading too many tracks simultaneously
 function executeInChunks(callbackArgs, callback, queueSize = 5) {
   const execWith = async (element, index) => {
     try {
       await callback(element);
     } catch (error) {
-        console.warn('Download of: ', element, " FAILED with error: ", error);
+      console.warn('Download of: ', element, ' FAILED with error: ', error);
     }
+
     return index;
   };
 
@@ -152,7 +208,9 @@ function executeInChunks(callbackArgs, callback, queueSize = 5) {
     if (callbackArgs.length) {
       try {
         const index = await Promise.race(queueArray);
+
         queueArray.splice(index, 1, execWith(callbackArgs.shift(), index));
+
         keepQueueSize();
       } catch (error) {
         console.error('Cannot assemble another chunk, error: ', error);
@@ -164,80 +222,83 @@ function executeInChunks(callbackArgs, callback, queueSize = 5) {
   keepQueueSize();
 }
 
+// Remove invalid filename characters
 function cleanUpSymbols(inputString) {
   return inputString.replace(/[:/\"*<>|?]/g, '');
 }
 
-function downloadFile(url, filename) {
-  return new Promise((resolve, reject) => {
-    unpromisifiedRequest({
-      url,
-      jar,
-      headers: {
-        'User-Agent': userAgent
-      }
-    })
-      .on('error', reject)
-      .pipe(
-        fs
-          .createWriteStream(filename)
-          .on('finish', resolve)
-          .on('error', reject)
-      );
+// Download a file using fetch() streaming
+async function downloadFile(url, filename) {
+  const response = await fetchWithCookies(url, {
+    headers: {
+      'User-Agent': userAgent
+    }
   });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${url}`);
+  }
+
+  // Stream download directly to disk without buffering entire file in RAM
+  await pipeline(response.body, fs.createWriteStream(filename));
 }
 
+// Download one individual track
 async function downloadTrack({ url, ...trackInfo }) {
-  Object.keys(trackInfo).forEach(
-    prop => (trackInfo[prop] = cleanUpSymbols(trackInfo[prop]))
-  );
+  // Clean filenames
+  Object.keys(trackInfo).forEach(prop => {
+    trackInfo[prop] = cleanUpSymbols(trackInfo[prop]);
+  });
 
-  const { albumArtist, albumTitle, trackNo, trackArtist, trackTitle } = trackInfo;
+  const {
+    albumArtist,
+    albumTitle,
+    trackNo,
+    trackArtist,
+    trackTitle
+  } = trackInfo;
+
   const filename = `${albumArtist}/${albumTitle}/${trackNo}. ${trackArtist} - ${trackTitle}.mp3`;
 
   console.log(`Starting download: ${trackNo} - ${trackTitle}`);
 
   try {
-    const file = await downloadFile(url, filename);
+    await downloadFile(url, filename);
     console.log(`Download is finished: ${trackNo} - ${trackTitle}`);
-    return file;
   } catch (error) {
     console.log(`Download is failed: ${trackNo} - ${trackTitle}`);
     throw error;
   }
 }
 
-function prepareAlbumDir(tracksData) {
-  return new Promise(resolve => {
-    const albumArtist = cleanUpSymbols(tracksData[0].albumArtist);
-    const albumTitle = cleanUpSymbols(tracksData[0].albumTitle);
-    const albumDir = `${albumArtist}/${albumTitle}`;
+// Create album directory structure
+async function prepareAlbumDir(tracksData) {
+  const albumArtist = cleanUpSymbols(tracksData[0].albumArtist);
+  const albumTitle = cleanUpSymbols(tracksData[0].albumTitle);
 
-    // Check the existence of the target directory
-    fs.access(albumDir, fs.constants.F_OK, error => {
-      if (error) {
-        fs.mkdir(`${albumArtist}`, () => {
-          fs.mkdir(albumDir, () => {
-            resolve(albumDir);
-          });
-        });
-      } else resolve(albumDir);
-    });
+  const albumDir = `${albumArtist}/${albumTitle}`;
+
+  // recursive:true creates parent directories automatically
+  await fs.promises.mkdir(albumDir, {
+    recursive: true
   });
+
+  return albumDir;
 }
 
+// Download album cover image
 async function downloadCover(coverURL, albumDir) {
   const filename = `${albumDir}/cover.jpg`;
 
   try {
-    const cover = await downloadFile(coverURL, filename);
+    await downloadFile(coverURL, filename);
     console.log('Cover is downloaded');
   } catch (error) {
     console.log('Failed to download cover');
-    // throw error;
   }
 }
 
+// Main program entry point
 (async () => {
   const {
     albumURL,
@@ -248,27 +309,44 @@ async function downloadCover(coverURL, albumDir) {
   } = processArgs(argv);
 
   try {
-    const body = await request({
-      url: albumURL,
-      jar,
-      headers: {
-        'User-Agent': userAgent
-      }
-    });
+    // Download album page HTML
+    const body = await fetchText(albumURL);
 
+    // Extract track information and cover URL
     const { tracksData, coverURL } = await getLinksAndTags(body, domain);
+
+    if (!tracksData.length) {
+      throw new Error('No tracks found');
+    }
+
+    // Create target album directory
     const albumDir = await prepareAlbumDir(tracksData);
 
+    // Download only one track if requested
     if (trackID) {
-      executeInChunks(tracksData.slice(trackID - 1, trackID), downloadTrack, 1);
+      executeInChunks(
+        tracksData.slice(trackID - 1, trackID),
+        downloadTrack,
+        1
+      );
+
       return;
     }
 
-    await downloadCover(coverURL, albumDir);
-    await executeInChunks(tracksData, downloadTrack, parallelDownloads);
+    // Download album cover
+    if (coverURL) {
+      await downloadCover(coverURL, albumDir);
+    }
 
+    // Download tracks in parallel
+    await executeInChunks(
+      tracksData,
+      downloadTrack,
+      parallelDownloads
+    );
   } catch (error) {
     console.log(`Failed to download the album: ${error}`);
+
     if (isDebugMode) {
       console.log(error.stack);
     }
