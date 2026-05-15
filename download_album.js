@@ -15,7 +15,8 @@ const userAgent =
 // Print help/usage information
 function usage(exitCode) {
   console.log(
-    'Usage:\nnode download_album.js [OPTIONS] ALBUM_URL\n\n' +
+    'Usage:\n' +
+      'node download_album.js [OPTIONS] ALBUM_URL\n\n' +
       'Valid options are:\n' +
       '-h|--help\tGet this message\n' +
       '-d|--debug\tPrint stack trace on error\n' +
