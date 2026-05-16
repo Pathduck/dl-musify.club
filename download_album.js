@@ -147,7 +147,7 @@ async function getLinksAndTags(html, domain) {
     }
 
     let apiResponse;
-    
+
     try {
       // Query Musify API to get the real MP3 stream URL
       apiResponse = await fetchJSON(
@@ -327,25 +327,25 @@ async function downloadCover(coverURL, albumDir) {
 
     // Download only one track if requested
     if (trackID) {
-	  const selectedTrack = tracksData[trackID - 1];
+      const selectedTrack = tracksData[trackID - 1];
 
     // Warn if track does not exist
-	if (!selectedTrack) {
+    if (!selectedTrack) {
       console.log(
         `Track ${trackID} was not found. Album contains ${tracksData.length} track(s).`
       );
 
-	  return;
+      return;
     }
 
-	// Download track
-	await executeInChunks(
-		[selectedTrack],
-		downloadTrack,
-		1
-	);
+    // Download track
+    await executeInChunks(
+      [selectedTrack],
+      downloadTrack,
+      1
+    );
 
-	  return;
+      return;
     }
 
     // Download album cover
