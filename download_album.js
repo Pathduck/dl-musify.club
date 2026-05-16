@@ -279,7 +279,6 @@ async function downloadTrack({ url, ...trackInfo }) {
 async function prepareAlbumDir(tracksData) {
   const albumArtist = cleanUpSymbols(tracksData[0].albumArtist);
   const albumTitle = cleanUpSymbols(tracksData[0].albumTitle);
-
   const albumDir = `${albumArtist}/${albumTitle}`;
 
   // recursive:true creates parent directories automatically
