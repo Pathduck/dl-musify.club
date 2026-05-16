@@ -146,41 +146,44 @@ async function getLinksAndTags(html, domain) {
       continue;
     }
 
+    let apiResponse;
+    
     try {
       // Query Musify API to get the real MP3 stream URL
-      const apiResponse = await fetchJSON(
+      apiResponse = await fetchJSON(
         `https://${domain}/api/track/${trackID}/stream-url`,
         {
           'X-Requested-With': 'XMLHttpRequest',
           Referer: `https://${domain}/`
         }
       );
-
-      const streamURL = apiResponse.url;
-
-      if (!streamURL) {
-        console.log(`No stream URL for track ${trackID}`);
-        continue;
-      }
-
-      // Store metadata for later downloading
-      tracksData.push({
-        url: streamURL,
-        albumArtist,
-        albumTitle,
-        trackNo,
-        trackArtist: $(element)
-          .find('.tracklist__artist a')
-          .text()
-          .trim(),
-        trackTitle: $(element)
-          .find('.tracklist__title a')
-          .text()
-          .trim()
-      });
     } catch (err) {
       console.log(`Failed API request for track ${trackID}`);
+      continue;
     }
+
+    const streamURL = apiResponse.url;
+
+    if (!streamURL) {
+      console.log(`No stream URL for track ${trackID}`);
+      continue;
+    }
+
+    // Store metadata for later downloading
+    tracksData.push({
+      url: streamURL,
+      albumArtist,
+      albumTitle,
+      trackNo,
+      trackArtist: $(element)
+        .find('.tracklist__artist a')
+        .text()
+        .trim(),
+      trackTitle: $(element)
+        .find('.tracklist__title a')
+        .text()
+        .trim()
+    });
   }
 
   return { tracksData, coverURL };
@@ -325,13 +328,25 @@ async function downloadCover(coverURL, albumDir) {
 
     // Download only one track if requested
     if (trackID) {
-      executeInChunks(
-        tracksData.slice(trackID - 1, trackID),
-        downloadTrack,
-        1
+	  const selectedTrack = tracksData[trackID - 1];
+
+    // Warn if track does not exist
+	if (!selectedTrack) {
+      console.log(
+        `Track ${trackID} was not found. Album contains ${tracksData.length} track(s).`
       );
 
-      return;
+	  return;
+    }
+
+	// Download track
+	await executeInChunks(
+		[selectedTrack],
+		downloadTrack,
+		1
+	);
+
+	  return;
     }
 
     // Download album cover
