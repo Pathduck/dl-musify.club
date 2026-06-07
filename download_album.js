@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-const cheerio = require('cheerio');
 const fs = require('fs');
+const cheerio = require('cheerio');
 const parseArgs = require('minimist');
-const { pipeline } = require('stream/promises');
-const { CookieJar } = require('tough-cookie');
 const fetchCookie = require('fetch-cookie').default;
+const { CookieJar } = require('tough-cookie');
+const { pipeline } = require('stream/promises');
 
 const jar = new CookieJar();
 const fetchWithCookies = fetchCookie(fetch, jar);
