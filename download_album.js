@@ -176,7 +176,7 @@ async function getLinksAndTags(html, domain) {
       albumTitle,
       trackNo,
       trackArtist: $(element)
-        .find('.tracklist__artist a')
+        .find('.tracklist__artist a:first-of-type')
         .text()
         .trim(),
       trackTitle: $(element)
