@@ -122,7 +122,7 @@ async function getLinksAndTags(html, domain) {
     .split(' - ', 2)
     .reverse();
   // All track elements in the playlist
-  const $tracks = $('.playlist__item');
+  const $tracks = $('#album-tracklist .playlist__item');
   // Album cover image URL
   const coverURL = $('.album-img').attr('src');
 
