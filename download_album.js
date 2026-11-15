@@ -10,7 +10,7 @@ const { pipeline } = require('stream/promises');
 const jar = new CookieJar();
 const fetchWithCookies = fetchCookie(fetch, jar);
 const userAgent =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36';
 
 // Print help/usage information
 function usage(exitCode) {
